@@ -52,16 +52,36 @@ AI 视频最大的成本不是模型订阅，而是**反复重抽**：提示词�
 
 `SKILL.md` 保持精炼，长提示词与对照表放 `references/`，只在需要时读取，避免一次性灌满上下文。
 
-## 使用方式
+## 安装
 
-把本仓库放进你的 agent 技能目录，或直接把 `SKILL.md` 的具体路径喂给 agent：
+推荐用 [`npx skills`](https://github.com/vercel-labs/skills) 安装，它会自动把 skill 软链到本机已装的各个 agent（Claude Code / Codex / Cursor / Gemini CLI 等）：
 
 ```bash
-# Claude Code 风格
-git clone https://github.com/xdlkc/ai-video-production.git ~/.claude/skills/ai-video-production
+# 装到当前项目（默认 project 作用域）
+npx skills add xdlkc/ai-video-production -y
 
-# 或作为子模块 / 子目录放进你自己的 skills 目录
+# 装到全局，供所有项目使用
+npx skills add xdlkc/ai-video-production -g -y
+
+# 只装这一个 skill，并软链到全部已检测到的 agent
+npx skills add xdlkc/ai-video-production --skill ai-video-production --all
 ```
+
+不安装、只想临时用一次：
+
+```bash
+npx skills use xdlkc/ai-video-production@ai-video-production
+```
+
+其他常用命令：
+
+```bash
+npx skills list          # 查看已安装的 skill
+npx skills update -y     # 更新到最新版本
+npx skills remove ai-video-production -y
+```
+
+也可以直接把本仓库 `SKILL.md` 的路径喂给 agent 读取，不安装也能用。
 
 需要提前准备的环境：Codex（生图）、ffmpeg、Python、火山方舟的 `ARK_API_KEY`。
 
