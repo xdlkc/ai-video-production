@@ -58,7 +58,7 @@ AI 视频最大的成本不是模型订阅，而是**反复重抽**：提示词�
 
 ```bash
 # Claude Code 风格
-git clone https://github.com/lkc12138-cloud/ai-video-production.git ~/.claude/skills/ai-video-production
+git clone https://github.com/xdlkc/ai-video-production.git ~/.claude/skills/ai-video-production
 
 # 或作为子模块 / 子目录放进你自己的 skills 目录
 ```
