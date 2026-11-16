@@ -1,96 +1,107 @@
 # ai-video-production
 
-> 用「Claude 当总导演 + Codex 当画师 + Seedance 当动画师」的多模型协作流水线，把一句想法做成一支完整的 AI 短片。
+English | [简体中文](./README.zh-CN.md)
 
-这是一个可被 Claude Code / Codex 等 agent 直接加载的 [`SKILL.md`](./SKILL.md) 技能包。核心目标只有一个：**用尽量少的钱、尽量低的抽卡率，做出一条自己满意的 AI 视频。**
+> Turn a single idea into a finished AI short film using a multi-model pipeline: **Claude as Director + Codex as Illustrator + Seedance as Animator**.
 
-## 为什么需要它
+This repository packages a [`SKILL.md`](./SKILL.md) skill for Claude Code, Codex, Cursor, Gemini CLI, and other Agent Skills-compatible agents. Its single goal: **produce a finished AI video you are happy with at minimum spend and minimum re-roll rate.**
 
-AI 视频最大的成本不是模型订阅，而是**反复重抽**：提示词写错一句话不要钱，重画一张图基本不要钱，但**重新生成视频按秒付费**。所以整条流水线的设计原则是：
+## Why This Pipeline Exists
 
+The real cost in AI video production is not model subscriptions — it is **blind re-rolling**. Editing a line of prompt text costs nothing, regenerating a still frame costs almost nothing, whereas **video generation is billed per second**. The pipeline enforces a strict cost-escalation ladder:
+
+```text
+Errors caught in text          ->  never leak into images
+Errors caught in images        ->  never burn video generation credits
+Errors fixable in video code   ->  never get re-shot (trim / patch in ffmpeg or Python)
+Mandatory re-shoots            ->  revise prompt or start/end frames first, re-shoot only that shot
 ```
-文字里能发现的错  →  不留到图上
-图上能发现的错    →  不留到视频上
-视频里能修的错    →  不重拍（先剪掉 / 先写代码修）
-必须重拍的镜头    →  先改提示词或首尾帧，再重拍，只拍这一镜
-```
 
-## 分工
+## Role Split
 
-| 角色 | 负责 |
+The user only talks to one interface — the **Director** — while models and tools split responsibilities:
+
+| Role | Responsibility |
 | --- | --- |
-| 用户 | 选方向、确认画风、批准花钱；看动态、听声音 |
-| 导演（Claude Code 等主 agent） | 写故事和分镜、写所有提示词、调用其他模型、抽帧放大检查、用代码做后期 |
-| 画师（Codex） | 画设定图、样帧、每个镜头的首帧和尾帧 |
-| 动画师（Seedance） | 把首尾帧变成几秒钟的视频 |
-| 工具（ffmpeg / Python） | 拼接、转场、调色、放大、卡点 |
+| **User** | Picks direction, confirms visual style, approves spend; reviews actual motion and audio. |
+| **Director** (Claude Code / main agent) | Writes story, shot list, and all prompts; invokes Codex & Seedance; extracts and zooms frames for inspection; runs code-based post-production. |
+| **Illustrator** (Codex) | Generates character/prop sheets, style frames, and exact start/end keyframes via `codex exec --skip-git-repo-check -s read-only`. |
+| **Animator** (Seedance) | Animates start/end keyframe pairs into video clips via Volcengine Ark (`doubao-seedance-2-5-260628` or `doubao-seedance-2-0-mini-260615`). |
+| **Tools** (`ffmpeg` / Python) | Concatenation, motion-blurred transitions, color matching, upscaling, and beat-synced cuts. |
 
-用户全程只和「导演」一个角色对话。
+For maximum shot pass rates, [`SKILL.md`](./SKILL.md) also defines an optional **4-Thread Mode** where the Director spawns three read-only subagents (**Reviewer**, **Supervisor**, and **Proxy**) alongside the **Worker** to catch mistakes and enforce user preferences within a fixed budget before spending money.
 
-## 八步流水线
+## Eight-Step Pipeline
 
-1. 想法 → 定稿剧情
-2. 剧情 → 分镜表
-3. 定画风 + 色表（先把配色定下来，后面所有图共用）
-4. 出首尾帧（设定图 → 样帧 → 每镜首帧/尾帧）
-5. 写视频提示词 + **提交前另开 agent 审核**
-6. 生成视频（先拍最难的镜头验路，再批量）
-7. 后期（全部用代码：拼接、转场、调色、放大、卡点）
-8. 全片只读复核 + 交付
+1. **Idea -> Locked Story**: Realistic causal checks, one-sentence theme, strong opening hook, sequential human reactions, and avoiding known AI video weaknesses.
+2. **Story -> Shot List & Color Sheet**: Shot-by-shot camera angles, motion motivation, 38%/62% composition, 1920x1080 color-block storyboards, and grayscale contrast verification.
+3. **Style & Character/Prop Sheets**: Lock art direction and fixed character/prop anchors before generating formal shots.
+4. **Start/End Keyframes**: Draft frame specs -> review -> generate the denser frame first (usually end frame) -> derive the paired frame for camera lock -> crop to matching 16:9 dimensions -> run the 8-point zoomed inspection checklist.
+5. **7-Segment Video Prompts + Pre-Submission Review**: Structured prompt (`Style`, `Camera`, `Composition & Palette`, `Characters`, `Second-by-Second`, `Audio`, `Constraints`) checked against [`references/pitfalls.md`](./references/pitfalls.md) and approved by a fresh-context **Reviewer agent** before any paid API call.
+6. **Video Generation**: Generate at 720p (upscale later), test the hardest shot first, keep all old takes, and check audio tracks before keeping them.
+7. **Code-Only Post-Production**: Handle BT.601 -> lossless intermediate -> BT.709 color management, segment color alignment, 8–16 slice motion-blur transitions, lanczos 1080p upscaling, and beat-syncing from the original audio track via `ffmpeg` and Python.
+8. **Blind Full-Film Audit & Delivery**: A fresh-context agent decodes frames across every shot and cut boundary without prior conclusions, distinguishes blockers from minor issues, and flags motion/audio checks for the user.
 
-## 仓库结构
+Project artifacts are organized into a dedicated folder layout: `01-story/`, `02-shotlist/`, `03-style/`, `04-frames/`, `05-prompts/`, `06-clips/`, `07-final/`.
 
-```
-.
-├── SKILL.md                    # frontmatter + 八步流程 + 八条规矩 + 四线程模式
-├── references/
-│   ├── prompts.md              # 可直接复制的九段提示词模板
-│   └── pitfalls.md             # 模型踩坑与有效写法对照表
-├── README.md
-└── LICENSE
-```
+## Installation
 
-`SKILL.md` 保持精炼，长提示词与对照表放 `references/`，只在需要时读取，避免一次性灌满上下文。
-
-## 安装
-
-推荐用 [`npx skills`](https://github.com/vercel-labs/skills) 安装，它会自动把 skill 软链到本机已装的各个 agent（Claude Code / Codex / Cursor / Gemini CLI 等）：
+Install using [`npx skills`](https://github.com/vercel-labs/skills) to symlink the skill across detected agents (Claude Code, Codex, Cursor, Gemini CLI, etc.):
 
 ```bash
-# 装到当前项目（默认 project 作用域）
+# Install into the current project (default project scope)
 npx skills add xdlkc/ai-video-production -y
 
-# 装到全局，供所有项目使用
+# Install globally across projects
 npx skills add xdlkc/ai-video-production -g -y
 
-# 只装这一个 skill，并软链到全部已检测到的 agent
+# Install this skill and symlink to all detected agents
 npx skills add xdlkc/ai-video-production --skill ai-video-production --all
 ```
 
-不安装、只想临时用一次：
+Run once without persistent installation:
 
 ```bash
 npx skills use xdlkc/ai-video-production@ai-video-production
 ```
 
-其他常用命令：
+Manage installed skills:
 
 ```bash
-npx skills list          # 查看已安装的 skill
-npx skills update -y     # 更新到最新版本
+npx skills list
+npx skills update -y
 npx skills remove ai-video-production -y
 ```
 
-也可以直接把本仓库 `SKILL.md` 的路径喂给 agent 读取，不安装也能用。
+You can also point any agent directly to [`SKILL.md`](./SKILL.md) without installing.
 
-需要提前准备的环境：Codex（生图）、ffmpeg、Python、火山方舟的 `ARK_API_KEY`。
+### Prerequisites
 
-## 已知边界
+- **Codex CLI** (image generation)
+- **`ffmpeg`** and **Python** (frame extraction, color/layout checks, post-production)
+- **`ARK_API_KEY`** environment variable (Volcengine Ark Seedance API; never printed or committed)
 
-- 导演 agent **看不到真正的动态，也听不到声音**，所以动态手感与音轨必须由用户亲自验收。
-- 提示词里的时间是近似的，实际节奏靠后期剪辑与变速对拍。
-- 模型有固定弱点（人物交叉、手拿小物件、画面文字、镜面反射、一镜内换光等），已在 `references/pitfalls.md` 汇总规避写法。
+## Repository & References
+
+```text
+.
+├── SKILL.md                    # Core pipeline, 8 non-negotiable rules, 4-thread mode, checklist
+├── references/
+│   ├── prompts.md              # 9 copy-paste prompt templates (director kickoff through 4-thread)
+│   └── pitfalls.md             # Model failure modes vs. verified prompt phrasings & post fixes
+├── README.md
+├── README.zh-CN.md
+└── LICENSE                     # MIT License
+```
+
+`SKILL.md` stays concise while long templates and troubleshooting tables live in [`references/prompts.md`](./references/prompts.md) and [`references/pitfalls.md`](./references/pitfalls.md), loaded on demand to avoid bloating context.
+
+## Known Boundaries
+
+- The director agent **cannot perceive true video motion or hear audio** — final pacing, motion feel, and soundtrack must always be verified by the user.
+- Timing inside generation prompts is approximate; final rhythm is achieved via code-based trimming and time-remapping in post-production.
+- Known model weaknesses (crossing characters, small handheld props, text, mirrors/reflections, lighting changes mid-shot, simultaneous multi-person actions) are cataloged with workarounds in [`references/pitfalls.md`](./references/pitfalls.md).
 
 ## License
 
-MIT
+[MIT](./LICENSE)
